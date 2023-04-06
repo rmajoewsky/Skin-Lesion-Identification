@@ -1,0 +1,1 @@
+First iteration using MobileNetV2: loss: 0.3217 - accuracy: 0.5160 - val_loss: 0.1800 - val_accuracy: 0.7356
