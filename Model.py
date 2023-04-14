@@ -69,7 +69,7 @@ def train_and_predict(model):
    #print(valid_batches.class_indices)
 
     opt = Adam(learning_rate=initial_lr, decay=initial_lr / epochs)
-    model.compile(loss="binary_crossentropy", optimizer=opt,
+    model.compile(loss="categorical_crossentropy", optimizer=opt,
         metrics=["accuracy"])
     
     fit = model.fit(train_batches,
