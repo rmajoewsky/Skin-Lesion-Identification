@@ -21,6 +21,51 @@ import matplotlib.pyplot as plt
 import numpy as np
 import argparse
 import os
+from tensorflow.keras.applications import MobileNetV2
+from tensorflow.keras.preprocessing.image import ImageDataGenerator
+from tensorflow.keras.applications import MobileNetV2
+from tensorflow.keras.layers import AveragePooling2D
+from tensorflow.keras.layers import Dropout
+from tensorflow.keras.layers import Flatten
+from tensorflow.keras.layers import Dense
+from tensorflow.keras.layers import Input
+from tensorflow.keras.models import Model
+from tensorflow.keras.optimizers import Adam
+from tensorflow.keras.applications.mobilenet_v2 import preprocess_input
+from tensorflow.keras.preprocessing.image import img_to_array
+from tensorflow.keras.preprocessing.image import load_img
+from tensorflow.keras.utils import to_categorical
+from sklearn.preprocessing import LabelBinarizer
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import classification_report
+from sklearn.metrics import confusion_matrix
+from sklearn.metrics import accuracy_score
+from sklearn.metrics import f1_score
+from tensorflow.keras.callbacks import EarlyStopping
+import matplotlib.pyplot as plt
+import numpy as np
+import argparse
+import os
+import tensorflow as tf
+from tensorflow.keras import backend as K
+
+# for calculating f1
+def custom_f1(y_true, y_pred):
+    def recall_m(y_true, y_pred):
+        TP = K.sum(K.round(K.clip(y_true * y_pred, 0, 1)))
+        Positives = K.sum(K.round(K.clip(y_true, 0, 1)))
+        recall = TP / (Positives + K.epsilon())
+        return recall
+
+    def precision_m(y_true, y_pred):
+        TP = K.sum(K.round(K.clip(y_true * y_pred, 0, 1)))
+        Pred_Positives = K.sum(K.round(K.clip(y_pred, 0, 1)))
+        precision = TP / (Pred_Positives + K.epsilon())
+        return precision
+
+    precision, recall = precision_m(y_true, y_pred), recall_m(y_true, y_pred)
+
+    return 2 * ((precision * recall)/ (precision + recall + K.epsilon()))
 
 def train_and_predict(model):
     train_path = '../Skin_Lesions/base_dir/train_dir'
@@ -38,23 +83,23 @@ def train_and_predict(model):
     
     file_path = "model.h5"
 
-    # Weight so model is more sensitive to melanoma
-    class_weights = {
-        0: 1.0, # akiec
-        1: 1.0, # bcc
-        2: 1.0, # bkl
-        3: 1.0, # df
-        4: 3.0, # mel 
-        5: 1.0, # nv
-        6: 1.0, # vasc
-    }
+    # # Weight so model is more sensitive to melanoma
+    # class_weights = {
+    #     0: 1.0, # akiec
+    #     1: 1.0, # bcc
+    #     2: 1.0, # bkl
+    #     3: 1.0, # df
+    #     4: 3.0, # mel 
+    #     5: 1.0, # nv
+    #     6: 1.0, # vasc
+    # }
 
     datagen = ImageDataGenerator(preprocessing_function = preprocess_input)
 
     train_batches = datagen.flow_from_directory(train_path,
                                             target_size=(image_size,image_size),
                                             batch_size=batch_size)
-
+    
 
     valid_batches = datagen.flow_from_directory(val_path,
                                             target_size=(image_size,image_size),
@@ -66,43 +111,45 @@ def train_and_predict(model):
                                             batch_size=1,
                                             shuffle=False)
     
-   #print(valid_batches.class_indices)
+   
+    lr_schedule = tf.keras.optimizers.schedules.ExponentialDecay(
+      initial_learning_rate=0.001,
+      decay_steps=10000,
+      decay_rate=0.99)
+    optimizer = tf.keras.optimizers.Adam(learning_rate=lr_schedule)
 
-    opt = Adam(learning_rate=initial_lr, decay=initial_lr / epochs)
-    model.compile(loss="binary_crossentropy", optimizer=opt,
-        metrics=["accuracy"])
+    
+    model.compile(loss="categorical_crossentropy", optimizer=optimizer,
+        metrics=["accuracy", custom_f1])
+    model.metrics_names
     
     fit = model.fit(train_batches,
         steps_per_epoch=train_file_count // batch_size,
-        class_weight=class_weights,
         validation_data=valid_batches,
         validation_steps=val_file_count // batch_size,
         epochs=epochs)
     preds = model.predict(test_batches)
-    # for each image in the testing set we need to find the index of the
-    # label with the corresponding largest predicted probability
-    preds = np.argmax(preds, axis=1)
-    test_labels = test_batches.classes
-    print(classification_report(test_labels, preds))
-    # show a nicely formatted classification report
-    print(confusion_matrix(test_labels, preds))
-    # show a nicely formatted classification report
-    print(accuracy_score(test_labels, preds))
 
     model.save('skin_lesion_classifier.model', save_format="h5")
-
+    # for each image in the testing set we need to find the index of the
+    # label with the corresponding largest predicted probability
+    # preds = np.argmax(preds, axis=1)
+    # test_labels = test_batches.classes
+    # print(classification_report(test_labels, preds))
+    # # show a nicely formatted classification report
+    # print(confusion_matrix(test_labels, preds))
     
 
-
-
+    #model.save('skin_lesion_classifier.model', save_format="h5")    
+ 
 def create_model():
     
     # create base model, freeze layers in base model so they don't get updated in first training
     # practice
     base_model = MobileNetV2(weights="imagenet", include_top=False, input_tensor=Input(shape=(224, 224, 3)))
-    for layer in base_model.layers: 
+    for layer in base_model.layers[:-23]: 
         layer.trainable = False
-
+       
     # create head model, citation for (initial) model structure: 
     # https://ai.plainenglish.io/blood-face-detector-in-python-part-1-machine-learning-and-deep-learning-classification-project-74aba7067e50
     head_model = base_model.output
@@ -115,12 +162,15 @@ def create_model():
     # head model on top of base model
     model = Model(inputs=base_model.input, outputs=head_model)
 
+    #print("Number of layers in the base model: ", len(base_model.layers))
+
     # train the model, make predictions on testing set 
     train_and_predict(model)
-
-
+                                                                
+                           
 def main():
     create_model()
-    
+                      
+         
 if __name__ == "__main__":
     main()
