@@ -118,10 +118,9 @@ def train_and_predict(model):
       decay_rate=0.99)
     optimizer = tf.keras.optimizers.Adam(learning_rate=lr_schedule)
 
-    
-    model.compile(loss="categorical_crossentropy", optimizer=optimizer,
-        metrics=["accuracy", custom_f1])
-    model.metrics_names
+    opt = Adam(learning_rate=initial_lr, decay=initial_lr / epochs)
+    model.compile(loss="categorical_crossentropy", optimizer=opt,
+        metrics=["accuracy"])
     
     fit = model.fit(train_batches,
         steps_per_epoch=train_file_count // batch_size,
